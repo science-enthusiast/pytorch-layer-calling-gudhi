@@ -1,8 +1,9 @@
-#A toy optimization problem. TS means time series. But it is not relevant. It is just a 1-D vector of values.
-
+#An optimization based modification of a time series through TDE representation.
 import torch
+from src.layer.util.common import convertTde
 import numpy as np
-from elemProdLayer import elemProdLayer
+from src.layer.tde import Tde
+from src.layer.elem_prod import ElemProd
 
 device = torch.device('cpu')
 #device = torch.device('cuda') #use in case the computer has an Nvidia GPU and CUDA is installed.
@@ -19,13 +20,11 @@ print(tgtTS)
 
 stepSiz = 1e-2
 
-myElemProdLayer = elemProdLayer()
+ElemProd = ElemProd()
 
 for t in range(500):
    print(reqTS)
-   scaleTS = myElemProdLayer(reqTS, oneVec)
-
-   scaleTS = torch.tensor(scaleTS, requires_grad = True)
+   scaleTS = ElemProd(reqTS, oneVec)
    #print(scaleTS) 
 
    loss = torch.nn.MSELoss()(tgtTS, scaleTS) 

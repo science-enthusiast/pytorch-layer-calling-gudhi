@@ -18,7 +18,7 @@ import scipy.fftpack as fftpack
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from common import *
+from .common import *
 
 """
 Return function and gradien values for a given value of time series.
@@ -593,7 +593,7 @@ def compFGRipsHaar(timeSeriesData, pcDim, scaleList, haarDerMatList, pdTwoList, 
 Return the 2-Wasserstein distance between two PDs.
 PD specified as a list of tensors.
 """
-def comp2Wass(pdOne, pdTwo, homDim, strictDim):
+def comp2WassSingleDim(pdOne, pdTwo):
     #return function value
     #pdOne: first PD.
     #pdTwo: second PD.
@@ -603,53 +603,8 @@ def comp2Wass(pdOne, pdTwo, homDim, strictDim):
 
     funcVal = 0
 
-    for iHomDim in range(len(homDim)):
-        pdOnePick = pdOne[iHomDim]
-        pdTwoPick = pdTwo[iHomDim] 
-
-        if homDim[iHomDim] in strictDim: #enforce strict one-to-one match. Note for that homology dimension, the two PDs should have same number of points. 
-            pdAugOnePick = pdOnePick
-            pdAugTwoPick = pdTwoPick
-            matchPts = findMatchConstrainedTensor(pdOnePick, pdTwoPick) #function to match equal number of points. 
-        else:
-            pdAugOnePick, pdAugTwoPick, numPtsOne, numPtsTwo = augmentPdTensor(pdOnePick, pdTwoPick) #augment PDs with diagonal projections from other PD. 
-            matchPts = findMatchTensor(pdAugOnePick, pdAugTwoPick, numPtsOne, numPtsTwo, "solve_dense")
-            #numPtsOne and numPtsTwo are the number of points for given homology dimension in the original persistence diagrams.
-            #It is returned by augmentPd and needed by findMatch.
-
-        #numPtsOne and numPtsTwo are the number of points for given homology dimension
-        #in the original persistence diagrams. Only numPtsOne is needed in the following lines.
-        numPtsOne = int(0.5*len(pdOnePick))
-
-        for iPtPD in range(numPtsOne):
-            funcVal = funcVal + (pdOnePick[2*iPtPD] - pdAugTwoPick[2*matchPts[iPtPD]])**2 + (pdOnePick[2*iPtPD + 1] - pdAugTwoPick[2*matchPts[iPtPD] + 1])**2
-
-        numPtsOneTotal = int(0.5*len(pdAugTwoPick))
-
-        #taking care of points in pdTwo that are matched to their projection on the diagonal
-        for iPtPd in range(numPtsOne,numPtsOneTotal): #if PD was not augmented by diagonal projection points, then this loop will not be entered into.
-            if (matchPts[iPtPd] < numPtsTwo):
-                diagVal = 0.5*(pdAugTwoPick[2*matchPts[iPtPd]] + pdAugTwoPick[2*matchPts[iPtPd] + 1])
-                funcVal = funcVal + (pdAugTwoPick[2*matchPts[iPtPd]] - diagVal)**2 + (pdAugTwoPick[2*matchPts[iPtPd] + 1] - diagVal)**2
- 
-    return funcVal
-
-"""
-Return the 2-Wasserstein distance between two PDs.
-PD specified as a list of tensors.
-"""
-def comp2WassOneDim(pdOne, pdTwo):
-    #return function value
-    #pdOne: first PD.
-    #pdTwo: second PD.
-    #Both PDs specified as a list of tensors.
-    #homDim: Homology dimensions over which the cost is computed.
-    #strictDim: Homology dimensions over which strict one-to-one match is enforced. 
-
-    funcVal = 0
-
-    #pdOneNP = pdOne.detach().numpy().copy()
-    #pdTwoNP = pdTwo.detach().numpy().copy()
+    pdOneNP = pdOne.detach().numpy().copy()
+    pdTwoNP = pdTwo.detach().numpy().copy()
 
     matchPts = findMatchConstrainedTensor(pdOne, pdTwo) #function to match equal number of points. 
 

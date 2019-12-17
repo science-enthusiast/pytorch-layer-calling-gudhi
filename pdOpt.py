@@ -1,90 +1,78 @@
 #An optimization based modification of a time series through TDE representation.
 import torch
-from common import convertTde
-from common import compPairDist
-from common import tgtRipsPdFromTimeSeries
-from common import gudhiToTensorList
+import torch.nn as nn
+import torch.optim as optim
+from src.layer.util.common import convertTde
+# from common import compPairDist
+from src.layer.util.common import tgtRipsPdFromTimeSeries
+from src.layer.util.common import gudhiToTensorList
 import numpy as np
-from tdeLayerOne import tdeLayerOne
-from elemProdLayer import elemProdLayer
-from pairDistLayer import pairDistLayer
-from ripsLayer import ripsLayer 
-from various_func_grad import comp2Wass
+from src.layer.tde import Tde
+from src.layer.elem_prod import ElemProd
+from src.layer.pair_dist import PairDist
+from src.layer.rips import Rips
+from src.layer.util.various_func_grad import comp2WassSingleDim
 
-#device = torch.device('cpu')
-device = torch.device('cuda') #use in case the computer has an Nvidia GPU and CUDA is installed.
+if torch.cuda.is_available():
+   device = torch.device('cuda')
+else:
+   device = torch.device('cpu')
 
-N = 100
+print("device: " + str(device))
+
+
+N = 30
 pcDim = 3
-homDim = [0,1]
-strictDim = [0]
+homDim = 0
+homDimList = [0,1]
+strictDim = 0
+strictDimList = [0]
 maxEdgeLen = 10.
- 
-oneVec = torch.ones(N, requires_grad = False)
-tgtTS = np.random.randn(N)
 
+
+class Net(nn.Module):
+   def __init__(self, hom_dim, max_edge_len):
+      super(Net, self).__init__()
+      self.TdeLayer = Tde() 
+      self.PairDist = PairDist()
+      self.Rips = Rips(hom_dim, max_edge_len)
+
+   def forward(self, x):
+      x = self.TdeLayer(x)
+      x = self.PairDist(x)
+      x = self.Rips(x)
+      return x
+
+tgtTS = np.random.randn(N)
 print(tgtTS)
 
 tgtPC = torch.tensor(convertTde(tgtTS), dtype=torch.float, requires_grad = False)
+tgtPDGudhi = tgtRipsPdFromTimeSeries(tgtTS, pcDim, homDimList, maxEdgeLen) 
+tgtPDList = gudhiToTensorList(tgtPDGudhi, homDimList, maxEdgeLen)
+tgtPD = tgtPDList[0]
 
-tgtPDGudhi = tgtRipsPdFromTimeSeries(tgtTS, pcDim, homDim, maxEdgeLen) 
+inputTS = torch.randn(len(tgtTS), device=device, requires_grad=True)
 
-tgtPD = gudhiToTensorList(tgtPDGudhi, homDim, maxEdgeLen)
+stepSiz = 1e-1
+net = Net(homDim, maxEdgeLen)
+optimizer = optim.Adam([inputTS], lr=stepSiz)
 
-print('tgtPD')
-print(tgtPD)
 
-reqTS = torch.randn(len(tgtTS), device=device, requires_grad=True)
 
-stepSiz = 1e-2
-
-myRipsLayerApply = ripsLayer.apply
-
-myPairDistLayer = pairDistLayer(compPairDist)
-
-myTdeLayer = tdeLayerOne() 
-
-myElemProdLayer = elemProdLayer()
-
-for t in range(1000):
-   scaleTS = myElemProdLayer(reqTS, oneVec)
-   #print(scaleTS) 
-   varPC = myTdeLayer(scaleTS)
-   pairDistVec = myPairDistLayer(varPC) 
-   varPD = myRipsLayerApply(pairDistVec, homDim, maxEdgeLen)
-
-   '''
+for t in range(500):
+   optimizer.zero_grad()
+   varPD = net(inputTS)
+   
    print('tgtPD')
    print(tgtPD)
 
    print('varPD')
    print(varPD)
-   '''
 
-   #loss = torch.sum(pairDistVec)
-
-   loss = comp2Wass(varPD, tgtPD, homDim, strictDim) 
-
-   #loss = (varPC - tgtPC).pow(2).sum()
-
-   #loss = varPC[0,0]
-
-   #loss = varPD[0][0]
-
-   '''
-   for p in range(int(len(varPD)/2)):
-      loss += varPD[2*p]
-      if varPD[2*p + 1] != maxEdgeLen:
-          loss += varPD[2*p + 1]
-
-   loss = torch.tensor(loss)
-   '''
-
-   print('iteration %d loss %f' % (t,loss.item()))
+   loss = comp2WassSingleDim(varPD, tgtPD) 
+   print('loss')
+   print(t, loss.item())
  
    loss.backward()
-
-   with torch.no_grad():
-      reqTS -= stepSiz*reqTS.grad
-
-      reqTS.grad.zero_() 
+   optimizer.step()
+   

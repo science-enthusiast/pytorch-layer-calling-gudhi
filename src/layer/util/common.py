@@ -15,26 +15,6 @@ from sklearn.neighbors import KDTree
 import gudhi as gd
 
 """
-A pair of points in Euclidean space is given, for which,
-the pairwise Euclidean distance is computed.
-"""
-
-def compPairDist(ptOne, ptTwo):
-    """
-    Input:
-    ptOne and ptTwo: Two input points in the form of 2D NumPy array, where
-                     number of columns is equal to the dimension of the space.
-    
-    Output:
-    eucDist: Pairwise Euclidean distances in the form of list of lists.
-    """
-
-    curDist = ptOne - ptTwo
-    curDist = curDist*curDist #using numpy.multiply() leads to RuntimeError: Can't call numpy() on Variable that requires grad. Use var.detach().numpy() instead.
-    curDist = torch.sum(curDist)
-    return torch.sqrt(curDist) #as above, numpy.sqrt() cannot be used.
-
-"""
 A set of points in Euclidean space is given, for which,
 pairwise Euclidean distances are computed.
 """
@@ -446,9 +426,6 @@ def tgtRipsPdFromTimeSeries(tgtTimeSeries, pcDim, homDim, maxEdgeLen):
 
     #PD of the target PC
     diag = simplex_tree.persistence(homology_coeff_field=2, min_persistence=0)
-
-    print('tgtRaipsPdFromTimeSeries:diag')
-    print(diag) 
  
     tgtPD = [] #target PD is a list of tuples, same as Gudhi format.
 
@@ -504,31 +481,21 @@ def augmentPdTensor(pdOne, pdTwo):
     numPtsOne = int(0.5*len(pdOne))
     numPtsTwo = int(0.5*len(pdTwo))
 
-    extElems = torch.zeros(2*numPtsOne)
-
-    indElem = 0
+    extElems = []
 
     for iPt in range(numPtsOne):
         projVal = 0.5*(pdOne[2*iPt] + pdOne[2*iPt + 1])
-        extElems[indElem] = projVal
-        indElem += 1
-        extElems[indElem] = projVal
-        indElem += 1
+        extElems.append(projVal)
+        extElems.append(projVal)
 
-    pdTwo = torch.cat((pdTwo,extElems)) 
+    pdTwo = torch.cat(extElems) 
 
-    extElems = torch.zeros(2*numPtsTwo)
-
-    indElem = 0
+    extElems = []
 
     for iPt in range(numPtsTwo):
         projVal = 0.5*(pdTwo[2*iPt] + pdTwo[2*iPt + 1])
-        extElems[indElem] = projVal
-        indElem += 1
-        extElems[indElem] = projVal
-        indElem += 1
-
-    pdOne = torch.cat((pdOne,extElems))
+        extElems.append(projVal)
+        extElems.append(projVal)
 
     return pdOne, pdTwo, numPtsOne, numPtsTwo
 
@@ -774,7 +741,7 @@ def attachEdge(pcPts, ptIdx):
 def attachEdgePairDist(pairDist, ptIdx):
     #find attaching edge of a given simplex.
     #the edge with the maximum length (for Rips filtration).
-    #pairDist: flat vector of pairwise distances.
+    #pairDist: matrix of pairwise distances.
 
     numPairs = len(pairDist)
 
@@ -784,17 +751,12 @@ def attachEdgePairDist(pairDist, ptIdx):
 
     edgeList = [(ind0,ind1) for ind0 in ptIdx for ind1 in ptIdx if ind0 > ind1]
 
-    #print('edgeList')
-    #print(edgeList)
-
     (edgeInd0, edgeInd1) = (None, None)
 
     maxLen = 0
 
     for (ind0,ind1) in edgeList:
-        #print('(ind0,ind1) (%d,%d)' % (ind0,ind1))
-
-        length = pairDist[int(ind0*(ind0 - 1)/2 + ind1)]
+        length = pairDist[ind0, ind1]
 
         if length > maxLen:
             maxLen = length

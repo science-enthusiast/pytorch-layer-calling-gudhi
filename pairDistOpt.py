@@ -1,58 +1,73 @@
-#An optimization based modification of a time series through TDE representation.
 import torch
-from common import convertTde
-from common import compPairDist
-from common import tgtRipsPdFromTimeSeries
-from common import gudhiToTensorList
+import torch.nn as nn
+import torch.optim as optim
 import numpy as np
-from tdeLayerOne import tdeLayerOne
-from elemProdLayer import elemProdLayer
-from pairDistLayer import pairDistLayer
-from ripsLayer import ripsLayer 
-from various_func_grad import comp2Wass
+
+
+from src.layer.tde import Tde
+#from layer.elemprodlayer import ElemProd
+from src.layer.pair_dist import PairDist
 
 if torch.cuda.is_available():
-   print('CUDA IS AVAILABLE')
    device = torch.device('cuda')
 else:
    device = torch.device('cpu')
 
 print("device: " + str(device))
 
-#device = torch.device('cpu')
-#device = torch.device('cuda') #use in case the computer has an Nvidia GPU and CUDA is installed.
-
-N = 5
+N = 10
 pcDim = 3
 homDim = [0]
 strictDim = [0]
 maxEdgeLen = 10.
- 
-oneVec = torch.ones(N, requires_grad = False)
 
-reqTS = torch.randn(N, device=device, requires_grad=True)
+class Net(nn.Module):
+   def __init__(self):
+      super(Net, self).__init__()
+      self.PairDist = PairDist()
+      self.TdeLayer = Tde() 
+
+   def forward(self, x):
+      x = self.TdeLayer(x)
+      x = self.PairDist(x)
+      return x
+      
+
+inputTS = torch.randn(N, device=device, requires_grad=True)
 
 stepSiz = 1e-3
 
-myPairDistLayer = pairDistLayer(compPairDist)
+net = Net()
+optimizer = optim.Adam([inputTS], lr=stepSiz)
 
-myTdeLayer = tdeLayerOne() 
 
-myElemProdLayer = elemProdLayer()
+def printgradnorm(self, grad_input, grad_output):
+    print('Inside ' + self.__class__.__name__ + ' backward')
+    print('Inside class:' + self.__class__.__name__)
+    print('')
+    print('grad_input: ', type(grad_input))
+    print('grad_input[0]: ', type(grad_input[0]))
+    print('grad_output: ', type(grad_output))
+    print('grad_output[0]: ', type(grad_output[0]))
+    print('')
+    print('grad_input size:', grad_input[0].size())
+    print('grad_output size:', grad_output[0].size())
+    print('grad_input norm:', grad_input[0].norm())
+    #import pdb; pdb.set_trace()
+
+
+net.PairDist.register_backward_hook(printgradnorm)
+net.TdeLayer.register_backward_hook(printgradnorm)
+
+
 
 for t in range(500):
-   scaleTS = myElemProdLayer(reqTS, oneVec)
-   print(scaleTS) 
-   varPC = myTdeLayer(scaleTS)
-   pairDistVec = myPairDistLayer(varPC) 
-
-   loss = torch.sum(pairDistVec)   
-   print('loss')
-   print(t, loss.item())
- 
+   optimizer.zero_grad()
+   pairDistVec = net(inputTS) 
+   loss = torch.sum(pairDistVec)
+   #import pdb;pdb.set_trace()
+   print("%d %f" % (t,loss)) 
    loss.backward()
-
-   with torch.no_grad():
-      reqTS -= stepSiz*reqTS.grad
-
-      reqTS.grad.zero_() 
+   optimizer.step()
+   #net.zero_grad()
+   
