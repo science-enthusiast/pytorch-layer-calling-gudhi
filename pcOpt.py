@@ -1,48 +1,48 @@
 #An optimization based modification of a time series through TDE representation.
 import torch
-from common import convertTde
+import torch.nn as nn
+import torch.optim as optim
+from src.layer.util.common import convertTde
 import numpy as np
-from tdeLayerOne import tdeLayerOne
-from elemProdLayer import elemProdLayer
+from src.layer.tde import Tde
+from src.layer.elem_prod import ElemProd
 
-#device = torch.device('cpu')
-device = torch.device('cuda') #use in case the computer has an Nvidia GPU and CUDA is installed.
+if torch.cuda.is_available():
+   device = torch.device('cuda')
+else:
+   device = torch.device('cpu')
+
+print("device: " + str(device))
+
+
+class Net(nn.Module):
+   def __init__(self):
+      super(Net, self).__init__()
+      self.TdeLayer = Tde() 
+
+   def forward(self, x):
+      return self.TdeLayer(x)
 
 N = 5
 
-oneVec = torch.ones(N, device=device, requires_grad = False)
 tgtTS = np.random.randn(N)
-
-print(tgtTS)
-
+print("tgtTS:" + str(tgtTS))
 tgtPC = torch.tensor(convertTde(tgtTS), dtype=torch.float, requires_grad = False)
 
-reqTS = torch.randn(len(tgtTS), device=device, requires_grad=True)
+inputTS = torch.randn(len(tgtTS), device=device, requires_grad=True)
+
 
 stepSiz = 1e-2
 
-myTdeLayer = tdeLayerOne() 
-
-myElemProdLayer = elemProdLayer()
+net = Net()
+optimizer = optim.Adam([inputTS], lr=stepSiz)
 
 for t in range(500):
-   scaleTS = myElemProdLayer(reqTS, oneVec)
-   #print(scaleTS) 
-   varPC = myTdeLayer(scaleTS)
-
-#   varPC.requires_grad = True
-
-#   print(varPC.size())
-
-#   print(tgtPC.size())
-
+   optimizer.zero_grad()
+   varPC = net(inputTS)
    loss = (varPC - tgtPC).pow(2).sum()
-#   loss = torch.nn.MSELoss()(varPC, tgtPC) 
+   # loss = torch.nn.MSELoss()(varPC, tgtPC) 
+   print(str(inputTS))
    print(t, loss.item())
-
    loss.backward()
-
-   with torch.no_grad():
-      reqTS -= stepSiz*reqTS.grad
-
-      reqTS.grad.zero_() 
+   optimizer.step()
